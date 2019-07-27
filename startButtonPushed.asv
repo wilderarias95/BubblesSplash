@@ -1,0 +1,202 @@
+% Create the function for the ButtonPushedFcn callback
+function startButtonPushed
+%--------------------------------------------------------------------------
+%--1. Inicializo el sistema -----------------------------------------------
+%--------------------------------------------------------------------------
+
+close all; % Cierra todas las ventanas, archivos y procesos abiertos
+radio=20; %radio de las burbujas
+color=[[255 0 0];[0 255 255];[255 255 0]; [0 0 255]]; %red cyan yellow blue
+coordenadax=0;
+coordenaday=0;
+k= randi([1 4],1,1); %genera un número aleatorio para seleccionar un color
+nextball = color(k,:); %burbuja inicial del juego
+k= randi([1 4],1,1); %genera un número aleatorio para seleccionar un color
+stockball = color(k,:); %burbuja en espera para el siguiente movimiento
+life=495; %barra total indicador de vida
+score_delete=399; %barra indicador de puntaje
+cont_score=0;
+saltos = 16; %paso para recorrer la matriz del tablero para hallar la ubicación
+%del dispositivo de control del juego
+%--------------------------------------------------------------------------
+%--2. Llenado de tablero con burbujas iniciales----------------------------
+%--------------------------------------------------------------------------
+cfondo = imread('imagenes/fondo.PNG'); %carga imagen en cfondo desde la 
+%dirección especificada
+cfondo= start_table(cfondo,radio); %se llama la funcion que retorna el 
+%tablero de juego con las burbujas iniciales
+% figure(1); %crea una ventana de visualización
+% imshow(cfondo); %Muestra el tablero en la ventana anterior
+
+%--------------------------------------------------------------------------
+%--3. Inicializar entrada de video-----------------------------------------
+%--------------------------------------------------------------------------
+
+imaqreset;% Desconecta y elimina todos los objetos de adquicisión de imagenes
+warning('off', 'Images:initSize:adjustingMag');
+video= videoinput('winvideo', 1, 'YUY2_352x288'); %objeto para capturar 
+%video de entrada por la camara
+video.Timeout = 15; %tiempo de espera para completar la lectura de video
+set(video,'FramesPerTrigger', Inf); 
+set(video,'returnedcolorSpace', 'rgb');
+start(video); %inicia captura de video en MatLab
+
+%----- Instrución de control for con la cantidad de movimientos posibles que
+%tiene el jugador----------------------------------------------------------
+for i=1:20 % tiene 20 movimientos posibles
+%--------------------------------------------------------------------------
+%--4. Caputra de pantallazos de las imagenes de entrada de video-----------
+%--------------------------------------------------------------------------
+    frame = getsnapshot(video); %obtiene una captura del video
+    frame = flip(frame,2);  %Invierte la captura para visualizarla en pantalla
+    %cform = makecform('srgb2cmyk'); %converción de familia de colores
+    cform=makecform('srgb2lab');
+    frame = applycform(frame, cform);%se aplica la conversión a la captura tomada
+    
+%--------------------------------------------------------------------------
+%--5.Se extrae las componentes  LAB de la captura--------------------------
+%--------------------------------------------------------------------------
+    resultl = frame(:,:,1); %componente l de color
+    resulta = frame(:,:,2); %componente a de color
+    a = resulta;
+    resultb= frame(:,:,3); %componente b de color
+%--------------------------------------------------------------------------
+%--6.se binariza la imagen en la componente a de color---------------------
+%--------------------------------------------------------------------------
+    [h,w]= size(resultl); 
+    for i=1:h
+        for j= 1:w
+            if(a(i,j)>85 && a(i,j)<95)   %24 55
+                resulta(i,j)=255;
+            else
+                resulta(i,j)=0;
+            end      
+        end
+    end
+    
+%--------------------------------------------------------------------------
+%--6.se dilata la imagen en la componente a de color-----------------------
+%--------------------------------------------------------------------------
+    se = strel('line',11,90); 
+    %resulta= imdilate(resulta,se);
+    
+%--------------------------------------------------------------------------
+%--7.busqueda de coordenadas x y y del control del juego ------------------------------
+%--------------------------------------------------------------------------
+    ban=0; %bandera para determinar cuando se encontro el control en pantalla
+    coordenadax =0;
+    coordenaday=0;
+    for i= 1:saltos:h
+        for j=1:saltos:w
+            cuadro=resulta(i:i+saltos-1,j:j+saltos-1); %se crea un cuadro de 16x16
+            cuno=sum(sum(cuadro)); %se suman todos los bits en 1 del cuadro anterior
+            k = 7
+            if cuno>500 %analizar en que cuadrado se encuentra la mayor
+                %cantidad de unos.
+                k = 8
+                A = sum(cuadro); %se suman las filas de cada columna y se obtiene un vector 1x16
+                B= find(A==max(A)); %en que columna esta el máximo de unos
+                C= size(B); %cuantas columnas tienen igual número de unos
+                jj=sum(B)/C(2); %promedio del valor de unos
+                coordenadax=j + jj; %Posición x aproximada del control
+                coordenaday=i; %Posición y aproximada del control
+                ban=1;
+                break;
+            end
+        end
+        if ban==1
+            break;
+        end
+    end
+   
+%--------------------------------------------------------------------------
+%--8.ubicación de la flecha del juego y visualización en el tablero--------
+%--------------------------------------------------------------------------
+%---- Se calcula el angulo, teta, de la dirección donde quiere lanzar la 
+%siguiente burbuja
+    x = coordenadax - w/2; %coordenada x del control del juego
+    y = h - coordenaday; %coordenada y del control del juego
+    teta= atan((y/x)); %angulo para lanzamiento de burbuja
+    
+%se define los angulos posibles del juego, que van desde 50° hasta los 130°
+    if teta<0 
+        if teta>-0.87 %angulos superiores a 130°
+            teta=-0.87; %angulo de 130° en radianes
+        end
+    else
+        if teta<0.87 %angulos inferiores a 130°
+            teta =0.87; %angulo de 50° en radianes
+        end
+    end
+    
+%---- se dibuja la flecha que muestra la dirección de la burbuja    
+    [cfondo2,x0b,y0b]=flecha_mov(cfondo,teta); %tablero con la nueva 
+%dirección y posiciones iniciales del movimiento de la burbuja 
+    figure(2); %crea la ventana de visualización del juego
+    imshow(cfondo2); % muestra el tablero de juego en la ventana anterior
+
+%--------------------------------------------------------------------------
+%--9.Dibuja la bola que se lanzara en el siguiente movimiento--------------
+%--------------------------------------------------------------------------
+%---- Dibuja la bola que se lanzara en el siguiente movimiento para que el
+%jugador prepare el proximo lanzamiento
+    cfondo2= drawball(cfondo2,23,575,radio,stockball); 
+    pause(0.4); %tiempo para que el jugador prepare el siguiente movimiento
+
+%--------------------------------------------------------------------------
+%--10.Dibuja la trayectoria de la burbuja por el tablero-------------------
+%--------------------------------------------------------------------------
+
+%Dibuja la trayectoria de la burbuja por el tablero y retorna el
+%tablero resultante cuando ocurre una colisión
+    [cfondo, score] = movball(radio, x0b, y0b, nextball, teta, cfondo2);
+
+%--------------------------------------------------------------------------
+%--11. Actualización de barra de estado de vida y score en el tablero------
+%--------------------------------------------------------------------------
+    %actualiza la barra de vida del jugador
+    cfondo(1:30,life-20:life,2)= 116; 
+    cfondo(1:30,life-20:life,3)= 127; 
+    life=life-20;
+    
+    %actualizar score
+    if score==1
+       cfondo(552:597,score_delete:score_delete+28,2)= 116; 
+       cfondo(552:597,score_delete:score_delete+28,3)= 127; 
+       cont_score= cont_score+1;
+       score_delete=score_delete+28;
+       if cont_score==3
+           
+           win=imread('imagenes/win.png'); %carga la imagen que 
+           %indica el jugador a ganado
+           
+           figure(3); % crea una ventana de visualización
+           imshow(win); %muestra la imagen en la anterior ventana
+           break;
+       end
+    end
+ 
+%--------------------------------------------------------------------------
+%--12. Verificar si se ha cruzado la línea de límite-----------------------
+%--------------------------------------------------------------------------
+
+%Verifica si alguna burbuja ha llegado a la linea límite, en este caso
+%el juego termina 
+    if (sum(cfondo(424,:,1))~= 39000 || i==20) %78*500 %suma los valores de la linea
+        %límite, para verificar que no haya perturbación de los colores 
+        gameover=imread('imagenes/game_over2.png'); %carga la imagen que 
+        %indica el fin de juego
+        close all
+        figure(3); % crea una ventana de visualización
+        imshow(gameover); %muestra la imagen en la anterior ventana
+        break;
+    end
+    
+    nextball = stockball; %se asigna la bola en espera al siguiente movimiento
+    k= randi([1 4],1,1); %genera un número aleatorio para seleccionar color
+    % de la burbuja
+    stockball = color(k,:); %guarda el color de la bola para el siguiente movimiento
+    
+end
+stop(video); %libera el recurso de video
+end
